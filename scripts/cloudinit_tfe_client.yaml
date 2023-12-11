@@ -1,0 +1,147 @@
+#cloud-config
+write_files:
+  - path: "/var/tmp/server.crt"
+    permissions: "0644"
+    owner: "root:root"
+    content: !!binary |
+      "${server_cert}"
+  - path: "/var/tmp/server.key"
+    permissions: "0644"
+    owner: "root:root"
+    content: !!binary |
+      "${server_key}"     
+  - path: /var/tmp/ssl.conf
+    permissions: '0644'
+    content: |  
+      server {
+          listen 443  ssl;
+          ssl on;
+          ssl_certificate     /etc/nginx/conf.d/server.crt;
+          ssl_certificate_key /etc/nginx/conf.d/server.key;
+      
+          root /var/www/html;
+          index index.html index.htm index.nginx-debian.html;
+          server_name ${dns_hostname}-client.${dns_zonename};
+      }     
+  - path: /lib/systemd/system/mitmdump.service
+    permissions: '0644'
+    content: |  
+     [Unit]
+     Description=mitmdump service
+     After=network.target
+     
+     [Service]
+     Type=simple
+     User=root
+     ExecStart=/usr/local/bin/mitmdump
+     Restart=always
+     RestartSec=1
+     
+     [Install]
+     WantedBy=multi-user.target     
+  - path: /var/tmp/providers.tf
+    permissions: '0644'
+    content: |  
+      terraform {
+        required_providers {
+          aws = {
+          }
+          null = {
+          }
+        }
+      }
+  - path: /var/www/html/index.html
+    permissions: '0644'
+    content: |  
+      <p><span style="font-size:28px">Terraform Network Mirroring</span></p>
+      
+      <p><span style="font-size:14px">This website is hosting the Terraform Providers for AWS and null which can be used as a download location for terraform</span></p>
+      
+      <p><span style="font-size:14px">How to:</span></p>
+      
+      <p><span style="font-size:14px">- Create a file called terraformrc-configuration</span></p>
+      
+      <p><span style="font-size:14px">- Add the following contents</span></p>
+      
+      <pre>
+      <code>provider_installation {
+        network_mirror {
+          url = "https://patrick-tfe3-client.tf-support.hashicorpdemo.com/"
+        }
+      }</code></pre>
+      
+      <p>- set your environment variable&nbsp;TF_CLI_CONFIG_FILE to the location of this file</p>
+      
+      <pre>
+      <code>export TF_CLI_CONFIG_FILE="$HOME/terraformrc-configuration"</code></pre>
+      
+      <p>- Have some code in main.tf file</p>
+      
+      <pre>
+      <code>resource "null" "test" {}</code></pre>
+      
+      <p>- Initialize the code using terraform init</p>
+      
+      <pre>
+      <code>terraform init</code></pre>
+      
+      <p>- The provider should now be downloaded from this website</p>
+  - path: /var/tmp/configure_nginx.sh   
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash    
+      pushd /var/tmp
+      
+      # install nginx
+      apt install -y nginx
+      systemctl enable nginx 
+      
+      # copy the certificates to be used by nginx to the correct location
+      cp /var/tmp/server.crt /etc/nginx/conf.d/server.crt
+      cp /var/tmp/server.key /etc/nginx/conf.d/server.key
+      
+      # configuration file for https
+      cp /var/tmp/ssl.conf /etc/nginx/conf.d/ssl.conf
+
+      # stop and start nginx service
+      systemctl stop nginx 
+      systemctl start nginx 
+  - path: /var/tmp/download_terraform_providers.sh   
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash    
+      pushd /var/tmp
+      
+      # Download the linux providers to default nginx hosting location
+      terraform providers mirror -platform=linux_amd64 /var/www/html/
+
+      # Download the MacOS provider to default nginx hosting location
+      terraform providers mirror -platform=darwin_amd64 /var/www/html/
+  - path: /var/tmp/install_configure_mitmproxy.sh   
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash    
+      pushd /var/tmp
+
+      # install the latest version of mitmproxy 
+      curl -o mitmproxy-10.1.1-linux.tar.gz https://downloads.mitmproxy.org/10.1.1/mitmproxy-10.1.1-linux.tar.gz 
+      tar xvzf mitmproxy-10.1.1-linux.tar.gz -C /usr/local/bin/
+
+      # enable the service
+      systemctl daemon-reload
+      systemctl enable mitmdump.service
+      systemctl start mitmdump.service
+runcmd:
+  - export DEBIAN_FRONTEND=noninteractive
+  - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+  - apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+  - apt-get update -y
+  - apt-get install -y terraform=${terraform_client_version}
+  - apt-get install -y awscli tree jq 
+  - echo ${rsyslog_conf} | base64 --decode > /etc/rsyslog.conf
+  - systemctl restart rsyslog
+  - systemctl enable rsyslog
+  - sudo bash /var/tmp/configure_nginx.sh 
+  - sudo bash /var/tmp/download_terraform_providers.sh 
+  - sudo bash /var/tmp/install_configure_mitmproxy.sh
+packages_update: true  
