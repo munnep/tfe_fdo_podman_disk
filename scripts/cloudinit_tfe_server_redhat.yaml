@@ -172,6 +172,12 @@ write_files:
       	mount -a
       fi
 
+      # install the SSM agent for remote connection
+      sudo dnf install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+
+      # enable the SSM service and start it 
+      sudo systemctl enable amazon-ssm-agent
+      sudo systemctl start amazon-ssm-agent
 
       # install Podman
       dnf module install -y container-tools
