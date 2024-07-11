@@ -64,13 +64,13 @@ resource "aws_security_group" "default-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    description = "ssh from private ip"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   description = "ssh from private ip"
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
 
   ingress {
@@ -152,6 +152,16 @@ resource "aws_iam_role" "role" {
       },
     ]
   })
+}
+
+# fetch the arn of the SecurityComputeAccess policy
+data "aws_iam_policy" "SecurityComputeAccess" {
+  name = "SecurityComputeAccess"
+}
+# add the SecurityComputeAccess policy to IAM role connected to your EC2 instance
+resource "aws_iam_role_policy_attachment" "SSM" {
+  role       = aws_iam_role.role.name
+  policy_arn = data.aws_iam_policy.SecurityComputeAccess.arn
 }
 
 resource "aws_iam_instance_profile" "profile" {
